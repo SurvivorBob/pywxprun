@@ -19,11 +19,12 @@ fio_un = config['Config']['UserName']
 import requests
 _requests_session = requests.Session()
 
+cache_filename = "http_cache_v2.db3"
 import time
 import sqlite3
-requests_cache_conn = sqlite3.Connection("http_cache.db3")
-requests_cache_conn.execute("create table if not exists cache (path, last_time, last_value)")
-requests_cache_conn.execute("create table if not exists cache2 (path, last_time, last_value)")
+requests_cache_conn = sqlite3.Connection(cache_filename)
+requests_cache_conn.execute("create table if not exists cache (path primary key, last_time, last_value)")
+requests_cache_conn.execute("create table if not exists cache2 (path primary key, last_time, last_value)")
 requests_cache_conn.commit()
 
 import threading
@@ -31,7 +32,7 @@ import threading
 fio_api_base = "https://rest.fnar.net"
 def fio_get(path):
     if threading.current_thread() != threading.main_thread():
-        _requests_cache_conn = sqlite3.Connection("http_cache.db3")
+        _requests_cache_conn = sqlite3.Connection(cache_filename)
     else:
         _requests_cache_conn = requests_cache_conn
     z = _requests_cache_conn.execute("select last_time, last_value from cache where path = ?", (path,)).fetchone()
@@ -57,7 +58,7 @@ def fio_get(path):
 fio2_api_base = "https://api.fnar.net"
 def fio2_get(path):
     if threading.current_thread() != threading.main_thread():
-        _requests_cache_conn = sqlite3.Connection("http_cache.db3")
+        _requests_cache_conn = sqlite3.Connection(cache_filename)
     else:
         _requests_cache_conn = requests_cache_conn
     z = _requests_cache_conn.execute("select last_time, last_value from cache2 where path = ?", (path,)).fetchone()
