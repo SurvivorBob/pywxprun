@@ -29,6 +29,7 @@ class EmpireController(controllers.controller.Controller):
         self.view.basesList.Bind(wx.EVT_LIST_ITEM_SELECTED, self.onBaseSelected)
         self.view.basesList.Bind(wx.EVT_LIST_ITEM_DESELECTED, self.onBaseSelected)
         self.view.basesList.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.onBaseDoubleClicked)
+        self.view.textCtrlFlowsFilter.Bind(wx.EVT_TEXT, self.onFlowsFilterChanged)
         self.view.checkBoxBalance.Bind(wx.EVT_CHECKBOX, self.onBalanceToggled)
 
         self.reloadViewFromModel()
@@ -58,6 +59,59 @@ class EmpireController(controllers.controller.Controller):
 
     def onBalanceToggled(self, event):
         self.reloadViewFromModel()
+
+    def onFlowsFilterChanged(self, event):
+        self.reloadFlows()
+
+    def reloadFlows(self):
+        self.view.flowsList.ClearAll()
+
+        self.view.flowsList.InsertColumn(0, "Mat")
+        self.view.flowsList.InsertColumn(1, "Amt/d")
+        self.view.flowsList.InsertColumn(2, "Rev/d")
+
+        totalEmpireFlow = self.empire.getTotalMaterialFlow()
+        allProduced = set()
+        allConsumed = set()
+        if self.view.checkBoxBalance.Value:
+            for b in self.empire.bases:
+                for k, v in b.getDailyMaterialInFlow().items():
+                    if v < 0:
+                        allConsumed.add(k)
+                for k, v in b.getDailyMaterialOutFlow().items():
+                    if v > 0:
+                        allProduced.add(k)
+            toShow = allProduced.intersection(allConsumed)
+            flows_list = [
+                (k,
+                round(v, 2),
+                int(self.empire.getProfitForSingleMaterialFlow(k, v)))
+                for k, v in totalEmpireFlow.items()
+                if k in toShow
+            ]
+            flows_list.sort(key=lambda x: x[2], reverse=True)
+
+        else:
+            flows_list = [
+                (k,
+                round(v, 2),
+                int(self.empire.getProfitForSingleMaterialFlow(k, v)))
+                for k, v in totalEmpireFlow.items()
+            ]
+            flows_list.sort(key=lambda x: x[2], reverse=True)
+
+            total_profit = sum(n[2] for n in flows_list if n is not None)
+            self.view.flowsList.Append(("Total", "", int(total_profit)))
+
+        if self.view.textCtrlFlowsFilter.Value:
+            filterValues = str(self.view.textCtrlFlowsFilter.Value).split(" ")
+            flows_list = [x for x in flows_list if x[0] in filterValues]
+
+        for x in flows_list:
+            self.view.flowsList.Append(x)
+
+        for i in range(self.view.flowsList.ColumnCount):
+            self.view.flowsList.SetColumnWidth(i, wx.LIST_AUTOSIZE_USEHEADER)
 
     def reloadViewFromModel(self):
         self.view.basesList.ClearAll()
@@ -98,51 +152,7 @@ class EmpireController(controllers.controller.Controller):
         for i in range(self.view.basesList.ColumnCount):
             self.view.basesList.SetColumnWidth(i, wx.LIST_AUTOSIZE_USEHEADER)
 
-        self.view.flowsList.ClearAll()
-
-        self.view.flowsList.InsertColumn(0, "Mat")
-        self.view.flowsList.InsertColumn(1, "Amt/d")
-        self.view.flowsList.InsertColumn(2, "Rev/d")
-
-        totalEmpireFlow = self.empire.getTotalMaterialFlow()
-        allProduced = set()
-        allConsumed = set()
-        if self.view.checkBoxBalance.Value:
-            for b in self.empire.bases:
-                for k, v in b.getDailyMaterialInFlow().items():
-                    if v < 0:
-                        allConsumed.add(k)
-                for k, v in b.getDailyMaterialOutFlow().items():
-                    if v > 0:
-                        allProduced.add(k)
-            toShow = allProduced.intersection(allConsumed)
-            flows_list = [
-                (k,
-                round(v, 2),
-                int(self.empire.getProfitForSingleMaterialFlow(k, v)))
-                for k, v in totalEmpireFlow.items()
-                if k in toShow
-            ]
-            flows_list.sort(key=lambda x: x[2], reverse=True)
-
-        else:
-            flows_list = [
-                (k,
-                round(v, 2),
-                int(self.empire.getProfitForSingleMaterialFlow(k, v)))
-                for k, v in totalEmpireFlow.items()
-            ]
-            flows_list.sort(key=lambda x: x[2], reverse=True)
-
-            total_profit = sum(n[2] for n in flows_list if n is not None)
-            self.view.flowsList.Append(("Total", "", int(total_profit)))
-
-        for x in flows_list:
-            self.view.flowsList.Append(x)
-
-        for i in range(self.view.flowsList.ColumnCount):
-            self.view.flowsList.SetColumnWidth(i, wx.LIST_AUTOSIZE_USEHEADER)
-
+        self.reloadFlows()
         self.refreshDeleteBaseButton()
 
     def onCreateBaseClicked(self, event):

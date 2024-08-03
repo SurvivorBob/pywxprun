@@ -26,6 +26,10 @@ class PlanetSearchController(controllers.controller.Controller):
         self.view.buttonSearch.Bind(wx.EVT_BUTTON, self.onDoSearch)
         self.view.buttonCreate.Bind(wx.EVT_BUTTON, self.onDoCreate)
         self.view.listCtrlResults.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.onDoCreate)
+        self.view.textCtrlSearch.Bind(wx.EVT_TEXT_ENTER, self.onDoSearch)
+        self.view.textCtrlDistFrom.Bind(wx.EVT_TEXT_ENTER, self.onDoSearch)
+        self.view.textCtrlResourceFilter.Bind(wx.EVT_TEXT_ENTER, self.onDoSearch)
+        self.view.textCtrlCOGCFilter.Bind(wx.EVT_TEXT_ENTER, self.onDoSearch)
 
         self.view.Show()
 

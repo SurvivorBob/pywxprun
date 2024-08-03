@@ -64,8 +64,21 @@ class EmpireView ( wx.Frame ):
 
 		bSizer11.Add( self.m_staticText4, 0, wx.ALL, 5 )
 
+		bSizer32 = wx.BoxSizer( wx.HORIZONTAL )
+
 		self.checkBoxBalance = wx.CheckBox( self, wx.ID_ANY, u"Empire Balancing", wx.DefaultPosition, wx.DefaultSize, 0 )
-		bSizer11.Add( self.checkBoxBalance, 0, wx.ALL, 5 )
+		bSizer32.Add( self.checkBoxBalance, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
+
+		self.m_staticText44 = wx.StaticText( self, wx.ID_ANY, u"Fltr", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.m_staticText44.Wrap( -1 )
+
+		bSizer32.Add( self.m_staticText44, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
+
+		self.textCtrlFlowsFilter = wx.TextCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.TE_PROCESS_ENTER )
+		bSizer32.Add( self.textCtrlFlowsFilter, 1, wx.ALL, 5 )
+
+
+		bSizer11.Add( bSizer32, 0, wx.EXPAND, 5 )
 
 		self.flowsList = wx.ListCtrl( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.LC_REPORT )
 		self.flowsList.SetFont( wx.Font( wx.NORMAL_FONT.GetPointSize(), wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, False, wx.EmptyString ) )
@@ -466,7 +479,7 @@ class PlanetSearchView ( wx.Frame ):
 
 		bSizer23.Add( self.m_staticText36, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
 
-		self.textCtrlSearch = wx.TextCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.textCtrlSearch = wx.TextCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.TE_PROCESS_ENTER )
 		bSizer23.Add( self.textCtrlSearch, 1, wx.ALL|wx.EXPAND, 5 )
 
 		self.m_staticText38 = wx.StaticText( self, wx.ID_ANY, u"Dist from Sys (opt.)", wx.DefaultPosition, wx.DefaultSize, 0 )
@@ -474,7 +487,7 @@ class PlanetSearchView ( wx.Frame ):
 
 		bSizer23.Add( self.m_staticText38, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
 
-		self.textCtrlDistFrom = wx.TextCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.textCtrlDistFrom = wx.TextCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.TE_PROCESS_ENTER )
 		bSizer23.Add( self.textCtrlDistFrom, 1, wx.ALL|wx.EXPAND, 5 )
 
 		self.buttonSearch = wx.Button( self, wx.ID_ANY, u"Search", wx.DefaultPosition, wx.DefaultSize, 0 )
@@ -490,7 +503,7 @@ class PlanetSearchView ( wx.Frame ):
 
 		bSizer25.Add( self.m_staticText37, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
 
-		self.textCtrlResourceFilter = wx.TextCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.textCtrlResourceFilter = wx.TextCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.TE_PROCESS_ENTER )
 		self.textCtrlResourceFilter.SetMinSize( wx.Size( 200,-1 ) )
 
 		bSizer25.Add( self.textCtrlResourceFilter, 0, wx.ALL, 5 )
@@ -500,7 +513,7 @@ class PlanetSearchView ( wx.Frame ):
 
 		bSizer25.Add( self.m_staticText40, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
 
-		self.textCtrlCOGCFilter = wx.TextCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.textCtrlCOGCFilter = wx.TextCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.TE_PROCESS_ENTER )
 		self.textCtrlCOGCFilter.SetMinSize( wx.Size( 200,-1 ) )
 
 		bSizer25.Add( self.textCtrlCOGCFilter, 0, wx.ALL, 5 )
@@ -754,7 +767,7 @@ class SplashFrame ( wx.Frame ):
 
 		bSizer31.Add( ( 0, 0), 1, wx.EXPAND, 5 )
 
-		self.m_staticText42 = wx.StaticText( self, wx.ID_ANY, u"Bob's Discount Planner", wx.DefaultPosition, wx.Size( -1,48 ), wx.ALIGN_CENTER_HORIZONTAL )
+		self.m_staticText42 = wx.StaticText( self, wx.ID_ANY, u"Bob's Discount™ Planner", wx.DefaultPosition, wx.Size( -1,48 ), wx.ALIGN_CENTER_HORIZONTAL )
 		self.m_staticText42.Wrap( -1 )
 
 		self.m_staticText42.SetFont( wx.Font( 24, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, False, wx.EmptyString ) )
