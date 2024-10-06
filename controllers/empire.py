@@ -3,11 +3,15 @@ import pubsub.pub
 
 import controllers.controller
 import controllers.planet_search
+import models.prun
 import resources.gui
 import models.empire
 import controllers.base
 
 import logging
+import math
+
+import threading
 
 class EmpireController(controllers.controller.Controller):
     def __init__(self, app, empire, *args, **kw):
@@ -17,6 +21,8 @@ class EmpireController(controllers.controller.Controller):
         self.compareEmpire : models.empire.Empire | None = None
         self.view : resources.gui.EmpireView = resources.gui.EmpireView(None)
         self.acceptingUpdates = True
+
+        self._updateThread = None
 
         self.basesListed = []
 
@@ -31,6 +37,8 @@ class EmpireController(controllers.controller.Controller):
         self.view.basesList.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.onBaseDoubleClicked)
         self.view.textCtrlFlowsFilter.Bind(wx.EVT_TEXT, self.onFlowsFilterChanged)
         self.view.checkBoxBalance.Bind(wx.EVT_CHECKBOX, self.onBalanceToggled)
+
+        self.view.toolBar.Bind(wx.EVT_TOOL, self.onRefreshClicked, id=self.view.toolRefreshFio.GetId())
 
         self.reloadViewFromModel()
 
@@ -129,6 +137,9 @@ class EmpireController(controllers.controller.Controller):
             if self.compareEmpire and len(b.getBuildingDeltaFromOtherBase(self.compareEmpire.getBaseForPlanet(b.planet.PlanetNaturalId))) > 0:
                 name_str = "Δ " + name_str
 
+            if self.compareEmpire and self.compareEmpire.getBaseForPlanet(b.planet.PlanetNaturalId)._needsRepair:
+                name_str = "🛠️ " + name_str
+
             capacity_t, capacity_m3 = models.empire.shipCapacities[b.defaultShipTypeIdx]
             shopping_list, _ = b.getSupplyListAndDuration(float('inf'), float('inf'))
             total_t, total_m3 = 0, 0
@@ -154,6 +165,46 @@ class EmpireController(controllers.controller.Controller):
 
         self.reloadFlows()
         self.refreshDeleteBaseButton()
+
+        inventorySurplusesByHub = self.empire.getInventorySurplusesByHub()
+        flowsByHub = self.empire.getMaterialFlowsByHub()
+        hubs = [k for k in inventorySurplusesByHub.keys()]
+        items = set()
+        for h in hubs:
+            items = items.union((k for k in inventorySurplusesByHub[h]))
+
+        # lol wut
+        if None in items:
+            items.remove(None)
+
+        items = list(items)
+        logging.info(items)
+        items.sort(key=lambda x: models.prun.materials[x].CategoryName + " " + models.prun.materials[x].Name)
+
+        self.view.shoppingCartList.ClearAll()
+        self.view.shoppingCartList.InsertColumn(0, "Mat")
+        for i, h in enumerate(hubs):
+            self.view.shoppingCartList.InsertColumn(1 + i, h)
+
+        for m in items:
+            r = [m] + [f"{math.floor(inventorySurplusesByHub[h].get(m, 0))} {'+' if flowsByHub[h].get(m, 0) > 0 else '-' if flowsByHub[h].get(m, 0) < 0 else ''}" for h in hubs]
+            self.view.shoppingCartList.Append(r)
+
+    def onRefreshClicked(self, event):
+        self.view.statusBar.PushStatusText("refreshing")
+        self.view.toolBar.EnableTool(self.view.toolRefreshFio.GetId(), False)
+
+        self._updateThread = threading.Thread(target=self.doRefreshFio)
+        self._updateThread.start()
+
+    def doRefreshFio(self):
+        models.prun.reload_live_data(0)
+        wx.CallAfter(self.onRefreshComplete)
+
+    def onRefreshComplete(self):
+        self.onEmpireChanged(id(self.empire))
+        self.view.statusBar.PopStatusText()
+        self.view.toolBar.EnableTool(self.view.toolRefreshFio.GetId(), True)
 
     def onCreateBaseClicked(self, event):
         c = controllers.planet_search.PlanetSearchController(self.app, self.empire)

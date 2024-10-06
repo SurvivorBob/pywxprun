@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import copy
+import datetime
 
 import models.util
 
@@ -30,7 +31,7 @@ requests_cache_conn.commit()
 import threading
 
 fio_api_base = "https://rest.fnar.net"
-def fio_get(path):
+def fio_get(path, cache_length = 600):
     if threading.current_thread() != threading.main_thread():
         _requests_cache_conn = sqlite3.Connection(cache_filename)
     else:
@@ -40,7 +41,7 @@ def fio_get(path):
         last_time, last_value = z
     else:
         last_time, last_value = None, None
-    if last_time is None or last_time < time.time() - 600:
+    if last_time is None or last_time < time.time() - cache_length:
         try:
             resp = _requests_session.get(fio_api_base + path, headers={"Authorization": fio_api_key}, timeout=15)
             if resp.status_code == 200:
@@ -56,7 +57,7 @@ def fio_get(path):
     return None
 
 fio2_api_base = "https://api.fnar.net"
-def fio2_get(path):
+def fio2_get(path, cache_length = 600):
     if threading.current_thread() != threading.main_thread():
         _requests_cache_conn = sqlite3.Connection(cache_filename)
     else:
@@ -66,7 +67,7 @@ def fio2_get(path):
         last_time, last_value = z
     else:
         last_time, last_value = None, None
-    if last_time is None or last_time < time.time() - 600:
+    if last_time is None or last_time < time.time() - cache_length:
         try:
             resp = _requests_session.get(fio2_api_base + path, headers={"Authorization": "FIOAPIKey " + fio_api_key}, timeout=15)
             if resp.status_code == 200:
@@ -115,6 +116,16 @@ class Material:
             return self.markets[mkt].MMBuy * n
         return self.markets[mkt].getPrice() * n
 
+    def getVolumeWeightedAveragePriceInMarket(self, mkt = None):
+        if not mkt:
+            mkt = config['Config']['DefaultMarket']
+        return self.markets[mkt].getVolumeWeightedAveragePrice()
+
+    def getTotalVolumeInMarket(self, mkt = None, days = 21):
+        if not mkt:
+            mkt = config['Config']['DefaultMarket']
+        return self.markets[mkt].getTotalVolume(days)
+
 materials : dict[str, Material] = {}
 moneyPrintingMatTickers = set(('EDC', 'IDC'))
 
@@ -135,10 +146,40 @@ class Market:
         self.BuyingOrders = []
         self.SellingOrders = []
 
+        self._raw_cxpc = []
+
+        self._cxpc_by_interval = {}
+
         self.__dict__.update(dat)
 
         self.BuyingOrders.sort(key=lambda x: x['ItemCost'], reverse=True)
         self.SellingOrders.sort(key=lambda x: x['ItemCost'], reverse=False)
+
+    def getVolumeWeightedAveragePrice(self, days = 21):
+        start_time = (time.time() - 86400 * days) * 1000
+        if "DAY_ONE" not in self._cxpc_by_interval:
+            return self.getPrice()
+
+        sum_p = 0
+        sum_v = 0
+        for c in self._cxpc_by_interval["DAY_ONE"]:
+            if c["DateEpochMs"] > start_time:
+                sum_p += c["Volume"]
+                sum_v += c["Traded"]
+        if sum_v == 0:
+            return self.getPrice()
+        return sum_p / sum_v
+
+    def getTotalVolume(self, days = 90):
+        start_time = (time.time() - 86400 * days) * 1000
+        if "DAY_ONE" not in self._cxpc_by_interval:
+            return self.getPrice()
+
+        sum_v = 0
+        for c in self._cxpc_by_interval["DAY_ONE"]:
+            if c["DateEpochMs"] > start_time:
+                sum_v += c["Volume"]
+        return sum_v
 
     def getPrice(self):
         if self.Supply > 0:
@@ -288,6 +329,27 @@ class Planet:
             recipes[new_recipe.BuildingRecipeId] = new_recipe
             self.ResourceRecipes.append(new_recipe)
 
+    @classmethod
+    def genericPlanet(cls):
+        ret = cls({
+            'PlanetNaturalId': 'GENERIC1',
+            'PlanetName': 'GENERIC1',
+            'COGCPrograms': [],
+            'COGCProgramStatus': '',
+            'BuildRequirements': [],
+            'Resources': [],
+            'Fertility': -0.99,
+        })
+        ret.BuildRequirements = {
+            'LSE': 4,
+            'TRU': 8,
+            'PSL': 12,
+            'LDE': 4,
+            'LTA': 4,
+            'MCG': 100
+        }
+        return ret
+
     def __repr__(self):
         return f"<Planet {self.PlanetNaturalId}>"
 
@@ -341,6 +403,13 @@ class Planet:
         rc = self.realReclaimableCost(ticker_or_building, days)
 
         return {k: bc[k] - rc.get(k, 0) for k in bc}
+
+    def getSuggestedRepairIntervalDays(self):
+        bm = self.buildingMaterials()
+        if "TSH" in bm or "BL" in bm or "HSE" in bm or "MGC" in bm:
+            return 89
+        else:
+            return 44
 
     def cogcType(self):
         if len(self.COGCPrograms) and self.COGCProgramStatus == 'ACTIVE':
@@ -446,6 +515,7 @@ class ExchangeStation:
         self.__dict__.update(dat)
 
 exchangeWarehouses : dict[str, ExchangeStation] = {}
+exchangeWarehousesByNaturalId : dict[str, ExchangeStation] = {}
 
 storages : dict[str, dict[str, int]] = {}
 
@@ -453,21 +523,14 @@ loaded = False
 def reload_all():
     materials.clear()
     logging.info("loading materials")
-    _all_materials = fio_get("/material/allmaterials")
+    _all_materials = fio_get("/material/allmaterials", cache_length=86400)
     for mat in _all_materials:
         m = Material(mat)
         materials[m.MaterialId] = m
         materials[m.Ticker] = m
 
-    logging.info("loading exchange data")
-    _exchange_data = fio_get("/exchange/full")
-    for dat in _exchange_data:
-        mkt = Market(dat)
-        mat = materials[mkt.MaterialTicker]
-        mat.markets[mkt.ExchangeCode] = mkt
-
     logging.info("loading building data")
-    _building_data = fio_get("/building/allbuildings")
+    _building_data = fio_get("/building/allbuildings", cache_length=86400)
     buildings.clear()
     recipes.clear()
     for dat in _building_data:
@@ -483,7 +546,7 @@ def reload_all():
 
     systems.clear()
     logging.info("loading system data")
-    _system_data = fio2_get("/map/systems")
+    _system_data = fio2_get("/map/systems", cache_length=86400)
     for dat in _system_data:
         sys = StarSystem(dat)
         systems[sys.SystemId] = sys
@@ -499,7 +562,7 @@ def reload_all():
 
     planets.clear()
     logging.info("loading planet data")
-    _planet_data = fio_get("/planet/allplanets/full")
+    _planet_data = fio_get("/planet/allplanets/full", cache_length=86400)
     for dat in _planet_data:
         pla = Planet(dat)
         planets[pla.PlanetNaturalId] = pla
@@ -507,7 +570,7 @@ def reload_all():
         planets_trie.insert(pla.PlanetName, pla)
 
     logging.info("loading workforce needs")
-    _worker_upkeep_data = fio_get("/global/workforceneeds")
+    _worker_upkeep_data = fio_get("/global/workforceneeds", cache_length=86400)
     workforce_needs.clear()
     for dat in _worker_upkeep_data:
         workforce_needs[{
@@ -520,29 +583,42 @@ def reload_all():
 
     logging.info("loading exchange stations")
     exchangeWarehouses.clear()
-    _exchange_station_data = fio_get("/exchange/station")
+    _exchange_station_data = fio_get("/exchange/station", cache_length=86400)
     for dat in _exchange_station_data:
         sta = ExchangeStation(dat)
         exchangeWarehouses[sta.WarehouseId] = sta
+        exchangeWarehousesByNaturalId[sta.NaturalId] = sta
+
+    reload_live_data()
+
+    loaded = True
+
+def reload_live_data(cache_length = 600):
+    logging.info("loading exchange data")
+    _exchange_data = fio_get("/exchange/full", cache_length=cache_length)
+    for dat in _exchange_data:
+        mkt = Market(dat)
+        mat = materials[mkt.MaterialTicker]
+        mat.markets[mkt.ExchangeCode] = mkt
 
     if len(fio_api_key) and len(fio_un):
         logging.info("loading player sites")
-        _sites_data = fio_get(f"/sites/{fio_un}")
+        _sites_data = fio_get(f"/sites/{fio_un}", cache_length=cache_length)
 
         _site_id_planet_id_map = {x['SiteId']: x['PlanetIdentifier'] for x in _sites_data}
 
         logging.info("loading player warehouses")
-        _warehouse_data = fio_get(f"/sites/warehouses/{fio_un}")
+        _warehouse_data = fio_get(f"/sites/warehouses/{fio_un}", cache_length=cache_length)
         _warehouse_id_planet_id_map = {x['StoreId']: x['LocationNaturalId'] for x in _warehouse_data}
 
         logging.info("loading player storages")
         storages.clear()
-        _storage_data = fio_get(f"/storage/{fio_un}")
+        _storage_data = fio_get(f"/storage/{fio_un}", cache_length=cache_length)
         for dat in _storage_data:
             tgt_id = dat.get('AddressableId', '')
             tgt = None
             if tgt_id in exchangeWarehouses:
-                tgt = exchangeWarehouses[tgt_id]
+                tgt = exchangeWarehouses[tgt_id].NaturalId
             elif tgt_id in _site_id_planet_id_map:
                 tgt = _site_id_planet_id_map[tgt_id]
             elif tgt_id in _warehouse_id_planet_id_map:
@@ -553,6 +629,37 @@ def reload_all():
                 for item in dat['StorageItems']:
                     inv[item['MaterialTicker']] = item['MaterialAmount']
                 storages[tgt] = inv
+
+def reload_cxpc():
+    logging.info("loading cxpc data")
+    for m in materials.values():
+        for mkt in m.markets.values():
+            if mkt._raw_cxpc is None or len(mkt._raw_cxpc) == 0:
+                exch_tk = mkt.MaterialTicker + "." + mkt.ExchangeCode
+                logging.info(f"get {exch_tk}")
+                mkt._raw_cxpc = fio_get(f"/exchange/cxpc/{exch_tk}", 86400)
+            mkt._cxpc_by_interval.clear()
+            if mkt._raw_cxpc:
+                for c in mkt._raw_cxpc:
+                    k = c["Interval"]
+                    if k not in mkt._cxpc_by_interval:
+                        mkt._cxpc_by_interval[k] = []
+                    mkt._cxpc_by_interval[k].append(c)
+
+def reload_cxpc_v2():
+    logging.info("loading cxpc (v2)")
+    cxpc_all = fio2_get("/cx/cxpc")
+    for i in cxpc_all:
+        m = materials[i['MaterialTicker']]
+        mkt = m.markets[i['ExchangeCode']]
+        mkt._cxpc_by_interval.clear()
+        mkt._raw_cxpc = i['Entries']
+        for c in mkt._raw_cxpc:
+            c["DateEpochMs"] = datetime.datetime.fromisoformat(c["Date"][:-1] + "+00:00").timestamp() * 1000
+            k = c["Interval"]
+            if k not in mkt._cxpc_by_interval:
+                mkt._cxpc_by_interval[k] = []
+            mkt._cxpc_by_interval[k].append(c)
 
 
 if __name__ == '__main__':

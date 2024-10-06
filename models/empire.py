@@ -11,6 +11,7 @@ from models.util import dict_add, dict_mul
 import math
 import re
 import copy
+import time
 
 import traceback
 
@@ -41,7 +42,6 @@ cogmIgnores = ["NA"]
 from models.util import dict_add, dict_mul
 
 MS_PER_DAY = 86400 * 1000
-REPAIR_INTERVAL_DAYS = 44
 
 class Empire:
     def __init__(self):
@@ -87,6 +87,8 @@ class Empire:
         for site in sites:
             bs = Base(out, prun.planets[site['PlanetIdentifier']])
             bs.SiteId = site['SiteId']
+
+            repairInterval = bs.getSuggestedRepairIntervalDays()
             buis = {}
             for bui in site['Buildings']:
                 bui_ticker = bui['BuildingTicker']
@@ -94,6 +96,9 @@ class Empire:
                     buis[bui_ticker] += 1
                 else:
                     buis[bui_ticker] = 1
+                if prun.buildings[bui_ticker].Expertise and (bui['BuildingLastRepair'] or bui['BuildingCreated']) < (time.time() - repairInterval * 86400) * 1000:
+                    print(bui_ticker)
+                    bs._needsRepair = True
             for bui_ticker, n in buis.items():
                 bs.setBuildingCount(bui_ticker, n)
 
@@ -221,6 +226,90 @@ class Empire:
             }
         }[faction]
 
+    def getMaterialFlowsByHub(self):
+        ret = {}
+
+        for b in self.bases:
+            sf_key = b.supplyFrom
+            if not sf_key:
+                continue
+            if sf_key not in prun.storages:
+                continue
+
+            if sf_key not in ret:
+                ret[sf_key] = {}
+
+            ret[sf_key] = dict_add(ret[sf_key], b.getDailyMaterialFlow(True))
+
+        return ret
+
+    def getMaterialInFlowsByHub(self):
+        ret = {}
+
+        for b in self.bases:
+            sf_key = b.supplyFrom
+            if not sf_key:
+                continue
+            if sf_key not in prun.storages:
+                continue
+
+            if sf_key not in ret:
+                ret[sf_key] = {}
+
+            ret[sf_key] = dict_add(ret[sf_key], {k: v for k, v in b.getDailyMaterialFlow(True).items() if v < 0})
+
+        return ret
+
+    def getMaterialOutFlowsByHub(self):
+        ret = {}
+
+        for b in self.bases:
+            sf_key = b.supplyFrom
+            if not sf_key:
+                continue
+            if sf_key not in prun.storages:
+                continue
+
+            if sf_key not in ret:
+                ret[sf_key] = {}
+
+            ret[sf_key] = dict_add(ret[sf_key], {k: v for k, v in b.getDailyMaterialFlow(True).items() if v > 0})
+
+        return ret
+
+    def getMaterialPendingByHub(self):
+        ret = {}
+
+        for b in self.bases:
+            sf_key = b.supplyFrom
+            if not sf_key:
+                continue
+            if sf_key not in prun.storages:
+                continue
+
+            if sf_key not in ret:
+                ret[sf_key] = {}
+
+            ret[sf_key] = dict_add(ret[sf_key], b.getSupplyListAndDuration(float('inf'), float('inf'))[0])
+
+        return ret
+
+    def getInventorySurplusesByHub(self):
+        matFlows = self.getMaterialFlowsByHub()
+
+        hubDemands = {k: dict_mul(v, -7) for k, v in self.getMaterialInFlowsByHub().items()}
+        hubPending = self.getMaterialPendingByHub()
+
+        hubRequired = {h: {k: max(hubDemands[h].get(k, 0), hubPending[h].get(k, 0)) for k in hubDemands[h]} for h in hubDemands}
+
+        hubInventories = {k: prun.storages.get(k, {}) for k in matFlows}
+        hubSurpluses = {k: dict_add(hubInventories[k], dict_mul(hubRequired[k], -1)) for k in hubInventories}
+
+        logging.info(f"COF {hubInventories.get('HRT', {}).get('COF', 0)}")
+
+        return hubSurpluses
+
+
 class Base:
     def __init__(self, empire, planet):
         self.empire: Empire = empire
@@ -235,6 +324,10 @@ class Base:
 
         self.defaultShipTypeIdx = 0
 
+        self.supplyFrom = ""
+
+        self._needsRepair = False
+
         self._shopping_list_cache = {}
 
     def serialize(self):
@@ -248,6 +341,7 @@ class Base:
         out['isCompanyHQ'] = self.isCompanyHQ
 
         out['defaultShipTypeIdx'] = self.defaultShipTypeIdx
+        out['supplyFrom'] = self.supplyFrom
 
         return out
 
@@ -261,6 +355,7 @@ class Base:
         ret.isCorpHQ = inp.get('isCorpHQ', False)
         ret.isCompanyHQ = inp.get('isCompanyHQ', False)
         ret.defaultShipTypeIdx = inp.get('defaultShipTypeIdx', 0)
+        ret.supplyFrom = inp.get('supplyFrom', '')
 
         if ret.isCompanyHQ:
             empire.companyHQ = ret.planet
@@ -297,6 +392,10 @@ class Base:
 
     def setShipTypeIdx(self, idx):
         self.defaultShipTypeIdx = min(len(shipCapacities) - 1, max(0, idx))
+        self.announceChanges()
+
+    def setSupplyFrom(self, warehouseId: str):
+        self.supplyFrom = warehouseId
         self.announceChanges()
 
     def getBuildingCount(self, ticker):
@@ -493,6 +592,9 @@ class Base:
     def getStorageAndWarehouseContents(self) -> dict[str, int]:
         return dict_add(self.getStorageContents(), prun.storages.get("W-" + self.planet.PlanetNaturalId, {}))
 
+    def getSuggestedRepairIntervalDays(self):
+        return self.planet.getSuggestedRepairIntervalDays()
+
     def getDailyMaterialInFlow(self, include_repairs = True):
         ret = {}
 
@@ -528,8 +630,8 @@ class Base:
         if include_repairs:
             for bui_ticker, n in self.buildings.items():
                 if len(self.recipesForBuilding(bui_ticker)) > 0:
-                    repair_cost = self.planet.realRepairCost(bui_ticker, REPAIR_INTERVAL_DAYS)
-                    ret = dict_add(ret, dict_mul(repair_cost, -n / REPAIR_INTERVAL_DAYS))
+                    repair_cost = self.planet.realRepairCost(bui_ticker, self.getSuggestedRepairIntervalDays())
+                    ret = dict_add(ret, dict_mul(repair_cost, -n / self.getSuggestedRepairIntervalDays()))
 
         return ret
 
@@ -588,7 +690,7 @@ class Base:
                 daily_cost += prun.purchaseCostForBasket(needs)
 
             # daily building depreciation
-            repair_cost = dict_mul(self.planet.realRepairCost(bui.Ticker, REPAIR_INTERVAL_DAYS), 1 / REPAIR_INTERVAL_DAYS)
+            repair_cost = dict_mul(self.planet.realRepairCost(bui.Ticker, self.getSuggestedRepairIntervalDays()), 1 / self.getSuggestedRepairIntervalDays())
             daily_cost += prun.purchaseCostForBasket(repair_cost)
 
             prod_cost += daily_cost * (rec.DurationMs / bui_eff) / MS_PER_DAY
@@ -625,7 +727,7 @@ class Base:
             ret -= prun.purchaseCostForBasket(needs)
 
         # daily building depreciation
-        repair_cost = dict_mul(self.planet.realRepairCost(bui.Ticker, REPAIR_INTERVAL_DAYS), 1 / REPAIR_INTERVAL_DAYS)
+        repair_cost = dict_mul(self.planet.realRepairCost(bui.Ticker, self.getSuggestedRepairIntervalDays()), 1 / self.getSuggestedRepairIntervalDays())
         ret -= prun.purchaseCostForBasket(repair_cost)
 
         return ret
@@ -695,7 +797,7 @@ class Base:
         # add mats needed for repairs
         for bui_ticker, n in self.buildings.items():
             if len(self.recipesForBuilding(bui_ticker)) > 0:
-                repair_cost = self.planet.realRepairCost(bui_ticker, REPAIR_INTERVAL_DAYS)
+                repair_cost = self.planet.realRepairCost(bui_ticker, self.getSuggestedRepairIntervalDays())
                 need = dict_add(need, dict_mul(repair_cost, n))
 
         # add desired supply

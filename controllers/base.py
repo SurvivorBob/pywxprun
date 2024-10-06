@@ -11,6 +11,11 @@ import controllers.controller
 
 from models.util import dict_add, dict_mul
 
+import json
+import pyperclip
+
+import logging
+
 class BaseController(controllers.controller.Controller):
     def __init__(self, app, base, *args, **kw):
         super().__init__(app, base, *args, **kw)
@@ -19,6 +24,8 @@ class BaseController(controllers.controller.Controller):
         self.base: models.empire.Base = base
         self.view: resources.gui.BaseView = resources.gui.BaseView(None)
         self.acceptingUpdates = True
+
+        self._lastShoppingList : dict[str, int] = {}
 
         self.productionBuildingControllers : list[ProductionBuildingController] = []
         self.availableBuildings = []
@@ -31,12 +38,16 @@ class BaseController(controllers.controller.Controller):
         self.view.radioBoxCargoBay.Bind(wx.EVT_RADIOBOX, self.onCargoBayTypeChanged)
         self.view.checkBoxCompanyHQ.Bind(wx.EVT_CHECKBOX, self.onCompanyHQToggled)
         self.view.checkBoxCorpHQ.Bind(wx.EVT_CHECKBOX, self.onCorpHQToggled)
+        self.view.buttonCopyJson.Bind(wx.EVT_BUTTON, self.onExportShoppingListJsonPressed)
 
         self.view.checkBoxCorpHQ.Enabled = self.base.planet.allowsCorpHQ()
 
         self.infrastructureSpinners: dict[str, wx.SpinCtrl] = {}
         self.expertSpinners: dict[str, wx.SpinCtrl] = {}
         self.setUpSpinnerData()
+
+        self.validSupplyFroms = [('', 'None')]
+        self.view.choiceSupplyFrom.Bind(wx.EVT_CHOICE, self.onSupplyFromChanged)
 
         self.reloadViewFromModel()
 
@@ -109,11 +120,38 @@ class BaseController(controllers.controller.Controller):
         # self.reloadShoppingListFromModel()
         # self.reloadSummaryViewFromModel()
 
+    def onSupplyFromChanged(self, event: wx.CommandEvent):
+        self.base.setSupplyFrom(self.validSupplyFroms[event.Selection][0])
+
     def onCompanyHQToggled(self, event: wx.CommandEvent):
         self.base.setIsCompanyHQ(event.IsChecked())
 
     def onCorpHQToggled(self, event: wx.CommandEvent):
         self.base.setIsCorpHQ(event.IsChecked())
+
+    def onExportShoppingListJsonPressed(self, _):
+        out = json.dumps({
+            "groups": [
+                {
+                    "type": "Manual",
+                    "name": "Materials",
+                    "materials": self._lastShoppingList,
+                }
+            ],
+            "actions": [
+                {
+                    "type": "MTRA",
+                    "name": "Load Mats",
+                    "group": "Materials",
+                    "origin": "Configure on Execution",
+                    "dest": "Configure on Execution"
+                }
+            ],
+            "global": {
+                "name": "BDP Export"
+            }
+        })
+        pyperclip.copy(out)
 
     def reloadResourcesFromModel(self):
         ct = self.view.listCtrlResources
@@ -131,7 +169,18 @@ class BaseController(controllers.controller.Controller):
         ct.ClearAll()
         ct.InsertColumn(0, "Mat")
         ct.InsertColumn(1, "Amt/Day")
-        flw_list = [(k, round(v, 2)) for k, v in self.base.getDailyMaterialFlow().items()]
+        ct.InsertColumn(2, "In")
+        ct.InsertColumn(3, "Out")
+
+        dailyMaterialFlow = self.base.getDailyMaterialFlow()
+        dailyMaterialInFlow = self.base.getDailyMaterialInFlow()
+        dailyMaterialOutFlow = self.base.getDailyMaterialOutFlow()
+
+        flw_list = [(
+            k, round(v, 2),
+            round(dailyMaterialInFlow.get(k, 0), 2),
+            round(dailyMaterialOutFlow.get(k, 0), 2)
+            ) for k, v in dailyMaterialFlow.items()]
         flw_list.sort(key=lambda x: x[1], reverse=True)
         for x in flw_list:
             ct.Append(x)
@@ -224,6 +273,8 @@ class BaseController(controllers.controller.Controller):
         total_m3 = 0
         total_days = 0
 
+        self._lastShoppingList = {}
+
         otherBase = self.app.compareEmpire.getBaseForPlanet(self.base.planet.PlanetNaturalId)
         buildingDiff = self.base.getBuildingDeltaFromOtherBase(otherBase)
         if len(buildingDiff):
@@ -244,6 +295,7 @@ class BaseController(controllers.controller.Controller):
                     self.view.listCtrlShopping.Append((k, v, round(dwgt, 2), round(dvol, 2)))
                     total_t += dwgt
                     total_m3 += dvol
+                    self._lastShoppingList[k] = self._lastShoppingList.get(k, 0) + v
 
         inFlows = {k: v for k, v in dict_mul(self.base.getDailyMaterialFlow(), -1).items() if v > 0}
         if len(inFlows):
@@ -264,11 +316,25 @@ class BaseController(controllers.controller.Controller):
                 self.view.listCtrlShopping.Append((k, v, round(dwgt, 2), round(dvol, 2)))
                 total_t += dwgt
                 total_m3 += dvol
+                self._lastShoppingList[k] = self._lastShoppingList.get(k, 0) + v
 
         if total_t > 0 or total_m3 > 0:
             self.view.listCtrlShopping.Append(("Total t/m3", "", round(total_t, 2), round(total_m3, 2)))
         if total_days > 0:
             self.view.listCtrlShopping.Append(("Total d", round(total_days, 2)))
+
+    def reloadSupplyFromsFromModel(self):
+        self.validSupplyFroms = [('', 'None')]
+        for st in models.prun.exchangeWarehousesByNaturalId.values():
+            if st.NaturalId in models.prun.storages:
+                dist = models.prun.systems[self.base.planet.SystemId].connectedDistanceTo(models.prun.systems[st.SystemId])
+                self.validSupplyFroms.append((st.NaturalId, f"{st.NaturalId} ({dist:.0f})"))
+
+        self.view.choiceSupplyFrom.Clear()
+        for val, label in self.validSupplyFroms:
+            i = self.view.choiceSupplyFrom.Append(label)
+            if val == self.base.supplyFrom:
+                self.view.choiceSupplyFrom.SetSelection(i)
 
     def reloadSummaryViewFromModel(self):
         self.view.radioBoxCargoBay.SetSelection(self.base.defaultShipTypeIdx)
@@ -346,8 +412,6 @@ class BaseController(controllers.controller.Controller):
         for i in range(self.view.listCtrlSummary.ColumnCount):
             self.view.listCtrlSummary.SetColumnWidth(i, wx.LIST_AUTOSIZE)
 
-
-
     def reloadViewFromModel(self):
         self.view.labelBaseName.SetLabel(self.base.planet.PlanetName)
         self.view.SetTitle(self.base.planet.PlanetName)
@@ -361,6 +425,7 @@ class BaseController(controllers.controller.Controller):
         self.reloadWorkerStatisticsFromModel()
         self.reloadSpinnersFromModel()
         self.reloadBuildingsFromModel()
+        self.reloadSupplyFromsFromModel()
         self.reloadShoppingListFromModel()
         self.reloadSummaryViewFromModel()
 

@@ -17,7 +17,7 @@ import wx.xrc
 class EmpireView ( wx.Frame ):
 
 	def __init__( self, parent ):
-		wx.Frame.__init__ ( self, parent, id = wx.ID_ANY, title = u"Empire View", pos = wx.DefaultPosition, size = wx.Size( 800,600 ), style = wx.DEFAULT_FRAME_STYLE|wx.TAB_TRAVERSAL )
+		wx.Frame.__init__ ( self, parent, id = wx.ID_ANY, title = u"Empire View", pos = wx.DefaultPosition, size = wx.Size( 1200,600 ), style = wx.DEFAULT_FRAME_STYLE|wx.TAB_TRAVERSAL )
 
 		self.SetSizeHints( wx.Size( -1,-1 ), wx.DefaultSize )
 
@@ -88,9 +88,42 @@ class EmpireView ( wx.Frame ):
 
 		bSizer9.Add( bSizer11, 1, wx.EXPAND, 5 )
 
+		bSizer35 = wx.BoxSizer( wx.VERTICAL )
+
+		self.m_staticText46 = wx.StaticText( self, wx.ID_ANY, u"Hub Inventory Levels", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.m_staticText46.Wrap( -1 )
+
+		bSizer35.Add( self.m_staticText46, 0, wx.ALL, 5 )
+
+		self.shoppingCartList = wx.ListCtrl( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.LC_REPORT )
+		self.shoppingCartList.SetFont( wx.Font( wx.NORMAL_FONT.GetPointSize(), wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, False, wx.EmptyString ) )
+
+		bSizer35.Add( self.shoppingCartList, 1, wx.ALL|wx.EXPAND, 5 )
+
+
+		bSizer9.Add( bSizer35, 1, wx.EXPAND, 5 )
+
 
 		self.SetSizer( bSizer9 )
 		self.Layout()
+		self.statusBar = self.CreateStatusBar( 1, wx.STB_SIZEGRIP, wx.ID_ANY )
+		self.toolBar = self.CreateToolBar( wx.TB_HORIZONTAL, wx.ID_ANY )
+		self.toolNewEmpire = self.toolBar.AddTool( wx.ID_ANY, u"New Empire", wx.ArtProvider.GetBitmap( wx.ART_NEW, wx.ART_TOOLBAR ), wx.NullBitmap, wx.ITEM_NORMAL, wx.EmptyString, wx.EmptyString, None )
+
+		self.toolLoadEmpire = self.toolBar.AddTool( wx.ID_ANY, u"Load", wx.ArtProvider.GetBitmap( wx.ART_FILE_OPEN, wx.ART_TOOLBAR ), wx.NullBitmap, wx.ITEM_NORMAL, wx.EmptyString, wx.EmptyString, None )
+
+		self.toolSaveEmpire = self.toolBar.AddTool( wx.ID_ANY, u"Save As...", wx.ArtProvider.GetBitmap( wx.ART_FILE_SAVE_AS, wx.ART_TOOLBAR ), wx.NullBitmap, wx.ITEM_NORMAL, wx.EmptyString, wx.EmptyString, None )
+
+		self.toolBar.AddSeparator()
+
+		self.toolRefreshFio = self.toolBar.AddTool( wx.ID_ANY, u"Refresh FIO", wx.ArtProvider.GetBitmap( u"gtk-refresh", wx.ART_TOOLBAR ), wx.NullBitmap, wx.ITEM_NORMAL, wx.EmptyString, wx.EmptyString, None )
+
+		self.toolBar.AddSeparator()
+
+		self.buttonOpenLogistics = wx.Button( self.toolBar, wx.ID_ANY, u"Logistics", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.toolBar.AddControl( self.buttonOpenLogistics )
+		self.toolBar.Realize()
+
 
 		self.Centre( wx.BOTH )
 
@@ -433,10 +466,36 @@ class BaseView ( wx.Frame ):
 		self.radioBoxCargoBay.SetSelection( 0 )
 		bSizer17.Add( self.radioBoxCargoBay, 0, wx.ALL|wx.EXPAND, 5 )
 
+		bSizer33 = wx.BoxSizer( wx.HORIZONTAL )
+
+		self.m_staticText45 = wx.StaticText( self, wx.ID_ANY, u"Supply From", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.m_staticText45.Wrap( -1 )
+
+		bSizer33.Add( self.m_staticText45, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
+
+		choiceSupplyFromChoices = []
+		self.choiceSupplyFrom = wx.Choice( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, choiceSupplyFromChoices, 0 )
+		self.choiceSupplyFrom.SetSelection( 0 )
+		bSizer33.Add( self.choiceSupplyFrom, 1, wx.ALL, 5 )
+
+
+		bSizer17.Add( bSizer33, 0, wx.EXPAND, 5 )
+
+		bSizer35 = wx.BoxSizer( wx.HORIZONTAL )
+
 		self.m_staticText35 = wx.StaticText( self, wx.ID_ANY, u"Shopping List", wx.DefaultPosition, wx.DefaultSize, 0 )
 		self.m_staticText35.Wrap( -1 )
 
-		bSizer17.Add( self.m_staticText35, 0, wx.ALL, 5 )
+		bSizer35.Add( self.m_staticText35, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
+
+
+		bSizer35.Add( ( 0, 0), 1, wx.EXPAND, 5 )
+
+		self.buttonCopyJson = wx.Button( self, wx.ID_ANY, u"Copy JSON", wx.DefaultPosition, wx.DefaultSize, 0 )
+		bSizer35.Add( self.buttonCopyJson, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
+
+
+		bSizer17.Add( bSizer35, 0, wx.EXPAND, 5 )
 
 		self.listCtrlShopping = wx.ListCtrl( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.LC_REPORT )
 		self.listCtrlShopping.SetFont( wx.Font( wx.NORMAL_FONT.GetPointSize(), wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, False, wx.EmptyString ) )
@@ -731,7 +790,7 @@ class ProductionBuildingRecipePanel ( wx.Panel ):
 
 		self.labelEstimatedProfit.SetFont( wx.Font( wx.NORMAL_FONT.GetPointSize(), wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, False, wx.EmptyString ) )
 
-		bSizer19.Add( self.labelEstimatedProfit, 0, wx.ALL, 5 )
+		bSizer19.Add( self.labelEstimatedProfit, 0, wx.ALL|wx.EXPAND, 5 )
 
 		self.spinCtrlCount = wx.SpinCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.Size( 120,-1 ), wx.SP_ARROW_KEYS, 0, 999, 0 )
 		bSizer19.Add( self.spinCtrlCount, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5 )
