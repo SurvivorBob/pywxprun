@@ -40,6 +40,10 @@ class EmpireController(controllers.controller.Controller):
 
         self.view.toolBar.Bind(wx.EVT_TOOL, self.onRefreshClicked, id=self.view.toolRefreshFio.GetId())
 
+        self.view.toolBar.EnableTool(self.view.toolNewEmpire.GetId(), False)
+        self.view.toolBar.EnableTool(self.view.toolLoadEmpire.GetId(), False)
+        self.view.toolBar.EnableTool(self.view.toolSaveEmpire.GetId(), False)
+
         self.reloadViewFromModel()
 
         pubsub.pub.subscribe(self.onEmpireChanged, "empire_changed")

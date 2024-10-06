@@ -120,8 +120,6 @@ class EmpireView ( wx.Frame ):
 
 		self.toolBar.AddSeparator()
 
-		self.buttonOpenLogistics = wx.Button( self.toolBar, wx.ID_ANY, u"Logistics", wx.DefaultPosition, wx.DefaultSize, 0 )
-		self.toolBar.AddControl( self.buttonOpenLogistics )
 		self.toolBar.Realize()
 
 
