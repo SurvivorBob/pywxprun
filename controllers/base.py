@@ -313,7 +313,11 @@ class BaseController(controllers.controller.Controller):
                 mat = models.prun.materials[k]
                 dwgt = mat.Weight * v
                 dvol = mat.Volume * v
-                self.view.listCtrlShopping.Append((k, v, round(dwgt, 2), round(dvol, 2)))
+
+                z = self.view.listCtrlShopping.Append((k, v, round(dwgt, 2), round(dvol, 2)))
+                if self.base.supplyFrom and self.base.supplyFrom in models.prun.storages and models.prun.storages.get(self.base.supplyFrom, {}).get(k, 0) < v:
+                    self.view.listCtrlShopping.SetItemTextColour(z, wx.Colour(255, 0, 0))
+
                 total_t += dwgt
                 total_m3 += dvol
                 self._lastShoppingList[k] = self._lastShoppingList.get(k, 0) + v
