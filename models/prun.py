@@ -511,6 +511,7 @@ class ExchangeStation:
     def __init__(self, dat):
         self.WarehouseId : str = ''
         self.NaturalId : str = ''
+        self.Name : str = ''
 
         self.__dict__.update(dat)
 

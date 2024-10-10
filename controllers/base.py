@@ -130,6 +130,9 @@ class BaseController(controllers.controller.Controller):
         self.base.setIsCorpHQ(event.IsChecked())
 
     def onExportShoppingListJsonPressed(self, _):
+        origin = "Configure on Execution"
+        if self.base.supplyFrom and self.base.supplyFrom in models.prun.exchangeWarehousesByNaturalId:
+            origin = f"{models.prun.exchangeWarehousesByNaturalId[self.base.supplyFrom].Name} Warehouse"
         out = json.dumps({
             "groups": [
                 {
@@ -143,7 +146,7 @@ class BaseController(controllers.controller.Controller):
                     "type": "MTRA",
                     "name": "Load Mats",
                     "group": "Materials",
-                    "origin": "Configure on Execution",
+                    "origin": origin,
                     "dest": "Configure on Execution"
                 }
             ],
