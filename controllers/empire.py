@@ -141,7 +141,7 @@ class EmpireController(controllers.controller.Controller):
             if self.compareEmpire and len(b.getBuildingDeltaFromOtherBase(self.compareEmpire.getBaseForPlanet(b.planet.PlanetNaturalId))) > 0:
                 name_str = "Δ " + name_str
 
-            if self.compareEmpire and self.compareEmpire.getBaseForPlanet(b.planet.PlanetNaturalId)._needsRepair:
+            if self.compareEmpire and self.compareEmpire.getBaseForPlanet(b.planet.PlanetNaturalId) and self.compareEmpire.getBaseForPlanet(b.planet.PlanetNaturalId)._needsRepair:
                 name_str = "🛠️ " + name_str
 
             capacity_t, capacity_m3 = models.empire.shipCapacities[b.defaultShipTypeIdx]
