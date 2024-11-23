@@ -26,6 +26,7 @@ class BaseController(controllers.controller.Controller):
         self.acceptingUpdates = True
 
         self._lastShoppingList : dict[str, int] = {}
+        self._lastExportsList : dict[str, int] = {}
 
         self.productionBuildingControllers : list[ProductionBuildingController] = []
         self.availableBuildings = []
@@ -39,6 +40,7 @@ class BaseController(controllers.controller.Controller):
         self.view.checkBoxCompanyHQ.Bind(wx.EVT_CHECKBOX, self.onCompanyHQToggled)
         self.view.checkBoxCorpHQ.Bind(wx.EVT_CHECKBOX, self.onCorpHQToggled)
         self.view.buttonCopyJson.Bind(wx.EVT_BUTTON, self.onExportShoppingListJsonPressed)
+        self.view.buttonCopyExportJson.Bind(wx.EVT_BUTTON, self.onExportExportsListJsonPressed)
 
         self.view.checkBoxCorpHQ.Enabled = self.base.planet.allowsCorpHQ()
 
@@ -151,7 +153,32 @@ class BaseController(controllers.controller.Controller):
                 }
             ],
             "global": {
-                "name": "BDP Export"
+                "name": "BDP Imports"
+            }
+        })
+        pyperclip.copy(out)
+
+    def onExportExportsListJsonPressed(self, _):
+        origin = f"{self.base.planet.PlanetName} Base"
+        out = json.dumps({
+            "groups": [
+                {
+                    "type": "Manual",
+                    "name": "Materials",
+                    "materials": self._lastExportsList,
+                }
+            ],
+            "actions": [
+                {
+                    "type": "MTRA",
+                    "name": "Load Mats",
+                    "group": "Materials",
+                    "origin": origin,
+                    "dest": "Configure on Execution"
+                }
+            ],
+            "global": {
+                "name": "BDP Exports"
             }
         })
         pyperclip.copy(out)
@@ -295,10 +322,13 @@ class BaseController(controllers.controller.Controller):
                     mat = models.prun.materials[k]
                     dwgt = mat.Weight * v
                     dvol = mat.Volume * v
-                    self.view.listCtrlShopping.Append((k, v, round(dwgt, 2), round(dvol, 2)))
+                    z = self.view.listCtrlShopping.Append((k, v, round(dwgt, 2), round(dvol, 2)))
                     total_t += dwgt
                     total_m3 += dvol
                     self._lastShoppingList[k] = self._lastShoppingList.get(k, 0) + v
+
+                    if self.base.supplyFrom and self.base.supplyFrom in models.prun.storages and models.prun.storages.get(self.base.supplyFrom, {}).get(k, 0) < v:
+                        self.view.listCtrlShopping.SetItemTextColour(z, wx.Colour(255, 0, 0))
 
         inFlows = {k: v for k, v in dict_mul(self.base.getDailyMaterialFlow(), -1).items() if v > 0}
         if len(inFlows):
@@ -318,12 +348,13 @@ class BaseController(controllers.controller.Controller):
                 dvol = mat.Volume * v
 
                 z = self.view.listCtrlShopping.Append((k, v, round(dwgt, 2), round(dvol, 2)))
-                if self.base.supplyFrom and self.base.supplyFrom in models.prun.storages and models.prun.storages.get(self.base.supplyFrom, {}).get(k, 0) < v:
-                    self.view.listCtrlShopping.SetItemTextColour(z, wx.Colour(255, 0, 0))
 
                 total_t += dwgt
                 total_m3 += dvol
                 self._lastShoppingList[k] = self._lastShoppingList.get(k, 0) + v
+
+                if self.base.supplyFrom and self.base.supplyFrom in models.prun.storages and models.prun.storages.get(self.base.supplyFrom, {}).get(k, 0) < self._lastShoppingList[k]:
+                    self.view.listCtrlShopping.SetItemTextColour(z, wx.Colour(255, 0, 0))
 
         if total_t > 0 or total_m3 > 0:
             self.view.listCtrlShopping.Append(("Total t/m3", "", round(total_t, 2), round(total_m3, 2)))
@@ -342,6 +373,39 @@ class BaseController(controllers.controller.Controller):
             i = self.view.choiceSupplyFrom.Append(label)
             if val == self.base.supplyFrom:
                 self.view.choiceSupplyFrom.SetSelection(i)
+
+    def reloadExportsFromModel(self):
+        self.view.listCtrlExports.ClearAll()
+
+        self.view.listCtrlExports.AppendColumn("Ticker")
+        self.view.listCtrlExports.AppendColumn("Count")
+        self.view.listCtrlExports.AppendColumn("t")
+        self.view.listCtrlExports.AppendColumn('m3')
+
+        total_t = 0
+        total_m3 = 0
+
+        self._lastExportsList = {}
+
+        total_list = self.base.getAvailableExports()
+        sorted_totalList = [i for i in total_list.items()]
+        sorted_totalList.sort(key=lambda x: models.prun.materials[x[0]].CategoryName + " " + models.prun.materials[x[0]].Name)
+
+        for k, v in sorted_totalList:
+            mat = models.prun.materials[k]
+            dwgt = mat.Weight * v
+            dvol = mat.Volume * v
+
+            z = self.view.listCtrlExports.Append((k, v, round(dwgt, 2), round(dvol, 2)))
+
+            total_t += dwgt
+            total_m3 += dvol
+            self._lastExportsList[k] = self._lastShoppingList.get(k, 0) + v
+
+        if total_t > 0 or total_m3 > 0:
+            self.view.listCtrlExports.Append(("Total t/m3", "", round(total_t, 2), round(total_m3, 2)))
+
+
 
     def reloadSummaryViewFromModel(self):
         self.view.radioBoxCargoBay.SetSelection(self.base.defaultShipTypeIdx)
@@ -434,6 +498,7 @@ class BaseController(controllers.controller.Controller):
         self.reloadBuildingsFromModel()
         self.reloadSupplyFromsFromModel()
         self.reloadShoppingListFromModel()
+        self.reloadExportsFromModel()
         self.reloadSummaryViewFromModel()
 
 

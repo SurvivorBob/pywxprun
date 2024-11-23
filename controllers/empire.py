@@ -154,13 +154,26 @@ class EmpireController(controllers.controller.Controller):
                 total_t += dwgt
                 total_m3 += dvol
             percent_ship_fill = round(max(total_t / capacity_t, total_m3 / capacity_m3) * 100)
+            i_or_e = "I"
+            exports_list = b.getAvailableExports()
+            total_t, total_m3 = 0, 0
+            for k, v in exports_list.items():
+                mat = models.prun.materials[k]
+                dwgt = mat.Weight * v
+                dvol = mat.Volume * v
+                total_t += dwgt
+                total_m3 += dvol
+            exports_fill = round(max(total_t / capacity_t, total_m3 / capacity_m3) * 100)
+            if exports_fill > percent_ship_fill:
+                percent_ship_fill = exports_fill
+                i_or_e = "E"
 
             self.view.basesList.Append([
                 name_str,
                 b.getTotalArea(),
                 b.getPermits(),
-                round(b.getCurrentSupplyDays(), 1),
-                percent_ship_fill
+                f"{round(b.getCurrentSupplyDays(), 1)}",
+                f"{percent_ship_fill} {i_or_e}"
             ])
             self.basesListed.append(b)
 

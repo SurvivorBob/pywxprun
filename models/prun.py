@@ -649,7 +649,8 @@ def reload_cxpc():
 
 def reload_cxpc_v2():
     logging.info("loading cxpc (v2)")
-    cxpc_all = fio2_get("/cx/cxpc")
+    from_time = int(time.time()) - 86400 * 60
+    cxpc_all = fio2_get(f"/cx/cxpc?from_time={from_time}")
     for i in cxpc_all:
         m = materials[i['MaterialTicker']]
         mkt = m.markets[i['ExchangeCode']]

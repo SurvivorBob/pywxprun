@@ -43,6 +43,8 @@ from models.util import dict_add, dict_mul
 
 MS_PER_DAY = 86400 * 1000
 
+DEFAULT_TARGET_D = 14
+
 class Empire:
     def __init__(self):
         self.bases: list[Base] = []
@@ -329,6 +331,7 @@ class Base:
         self._needsRepair = False
 
         self._shopping_list_cache = {}
+        self._export_cache = {}
 
     def serialize(self):
         out = {}
@@ -364,6 +367,7 @@ class Base:
 
     def announceChanges(self):
         self._shopping_list_cache.clear()
+        self._export_cache.clear()
 
         pubsub.pub.sendMessage("empire_changed", empire_id=id(self.empire))
         pubsub.pub.sendMessage("base_changed", base_id=id(self))
@@ -775,7 +779,7 @@ class Base:
 
         # return total_list, total_days
 
-    def getSupplyListAndDuration(self, remaining_t, remaining_m3, target_d = 14):
+    def getSupplyListAndDuration(self, remaining_t, remaining_m3, target_d = DEFAULT_TARGET_D):
         cache_key = (remaining_t, remaining_m3, target_d)
         if cache_key in self._shopping_list_cache:
             # logging.info(f"{self} getSupplyListAndDuration cache")
@@ -801,12 +805,29 @@ class Base:
                 need = dict_add(need, dict_mul(repair_cost, n))
 
         # add desired supply
-        tgt_supply = dict_mul(self.getDailyMaterialFlow(False), -target_d)
+        dailyMaterialFlow = self.getDailyMaterialFlow(False)
+        tgt_supply = dict_mul(dailyMaterialFlow, -target_d)
         tgt_supply = {k: v for k, v in tgt_supply.items() if v > 0}
+
+        # for every recipe requested by this base ensure we are asking for enough
+        # to run at least 2n runs of everything
+        min_supply = {}
+        for bui_ticker, recipes in self.production_lines.items():
+            if self.buildings.get(bui_ticker, 0) > 0:
+                for recipe_key, runs in recipes.items():
+                    if runs > 0:
+                        recipe : prun.Recipe = prun.recipes[recipe_key]
+                        for mat, qty in recipe.Inputs.items():
+                            if dailyMaterialFlow[mat] != 0:
+                                min_supply[mat] = min_supply.get(mat, 0) + qty * runs * 2
+
+        for mat, qty in min_supply.items():
+            if tgt_supply.get(mat, 0) < qty:
+                tgt_supply[mat] = qty
 
         # logging.info(tgt_supply)
 
-        want = {k: v for k, v in tgt_supply.items()}
+        want = {k: v for k, v in tgt_supply.items() if v > 0}
         for k in want:
             if want[k] < 2:
                 want[k] = 2
@@ -884,6 +905,54 @@ class Base:
 
         ret = {k: v for k, v in cart.items() if v > 0}, new_days - current_days
         self._shopping_list_cache[cache_key] = ret
+
+        return ret
+
+    def getAvailableExports(self, remaining_t = float('inf'), remaining_m3 = float('inf'), target_d = DEFAULT_TARGET_D):
+        cache_key = (remaining_t, remaining_m3, target_d)
+        if cache_key in self._export_cache:
+            return self._export_cache[cache_key]
+
+        min_stock = {}
+
+        repair_cost = {}
+        # add mats needed for repairs
+        for bui_ticker, n in self.buildings.items():
+            if len(self.recipesForBuilding(bui_ticker)) > 0:
+                repair_cost = self.planet.realRepairCost(bui_ticker, self.getSuggestedRepairIntervalDays())
+                min_stock = dict_add(min_stock, dict_mul(repair_cost, n))
+
+        # for every recipe requested by this base ensure we are asking for enough
+        # to run at least 2n runs of everything
+        min_supply = {}
+        for bui_ticker, recipes in self.production_lines.items():
+            if self.buildings.get(bui_ticker, 0) > 0:
+                for recipe_key, runs in recipes.items():
+                    if runs > 0:
+                        recipe : prun.Recipe = prun.recipes[recipe_key]
+                        for mat, qty in recipe.Inputs.items():
+                            min_supply[mat] = min_supply.get(mat, 0) + qty * runs * 2
+        min_stock = dict_add(min_stock, min_supply)
+
+        # for consumables ensure we have at least enough for target days
+        worker_reqs = {}
+        workers_needed = self.getWorkersNeeded()
+        worker_capacities = self.getWorkerCapacities()
+        for k in workers_needed:
+            needs_per_100 = prun.workforce_needs[k]
+            if workers_needed[k] > 0 and worker_capacities[k] > 0:
+                workers_available = min(workers_needed[k], worker_capacities[k])
+                worker_reqs = dict_add(worker_reqs, dict_mul(needs_per_100, workers_available / 100))
+        for k, v in worker_reqs.items():
+            min_stock[k] = max(min_stock.get(k, 0), math.ceil(v * target_d))
+
+        ret = dict_add(self.getStorageContents(), dict_mul(min_stock, -1))
+
+        # only be exporting things with positive net flow
+        dailyMaterialFlow = self.getDailyMaterialFlow()
+        ret = {k: v for k, v in ret.items() if v > 0 and dailyMaterialFlow.get(k, 0) > 0}
+
+        self._export_cache[cache_key] = ret
 
         return ret
 

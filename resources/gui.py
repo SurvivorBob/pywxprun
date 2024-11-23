@@ -17,7 +17,7 @@ import wx.xrc
 class EmpireView ( wx.Frame ):
 
 	def __init__( self, parent ):
-		wx.Frame.__init__ ( self, parent, id = wx.ID_ANY, title = u"Empire View", pos = wx.DefaultPosition, size = wx.Size( 1200,600 ), style = wx.DEFAULT_FRAME_STYLE|wx.TAB_TRAVERSAL )
+		wx.Frame.__init__ ( self, parent, id = wx.ID_ANY, title = u"Empire View", pos = wx.DefaultPosition, size = wx.Size( 1200,800 ), style = wx.DEFAULT_FRAME_STYLE|wx.TAB_TRAVERSAL )
 
 		self.SetSizeHints( wx.Size( -1,-1 ), wx.DefaultSize )
 
@@ -479,9 +479,13 @@ class BaseView ( wx.Frame ):
 
 		bSizer17.Add( bSizer33, 0, wx.EXPAND, 5 )
 
+		self.m_notebook1 = wx.Notebook( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.m_panel3 = wx.Panel( self.m_notebook1, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.TAB_TRAVERSAL )
+		bSizer36 = wx.BoxSizer( wx.VERTICAL )
+
 		bSizer35 = wx.BoxSizer( wx.HORIZONTAL )
 
-		self.m_staticText35 = wx.StaticText( self, wx.ID_ANY, u"Shopping List", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.m_staticText35 = wx.StaticText( self.m_panel3, wx.ID_ANY, u"Shopping List", wx.DefaultPosition, wx.DefaultSize, 0 )
 		self.m_staticText35.Wrap( -1 )
 
 		bSizer35.Add( self.m_staticText35, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
@@ -489,16 +493,53 @@ class BaseView ( wx.Frame ):
 
 		bSizer35.Add( ( 0, 0), 1, wx.EXPAND, 5 )
 
-		self.buttonCopyJson = wx.Button( self, wx.ID_ANY, u"Copy JSON", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.buttonCopyJson = wx.Button( self.m_panel3, wx.ID_ANY, u"Copy JSON", wx.DefaultPosition, wx.DefaultSize, 0 )
 		bSizer35.Add( self.buttonCopyJson, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
 
 
-		bSizer17.Add( bSizer35, 0, wx.EXPAND, 5 )
+		bSizer36.Add( bSizer35, 0, wx.EXPAND, 5 )
 
-		self.listCtrlShopping = wx.ListCtrl( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.LC_REPORT )
+		self.listCtrlShopping = wx.ListCtrl( self.m_panel3, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.LC_REPORT )
 		self.listCtrlShopping.SetFont( wx.Font( wx.NORMAL_FONT.GetPointSize(), wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, False, wx.EmptyString ) )
 
-		bSizer17.Add( self.listCtrlShopping, 1, wx.ALL|wx.EXPAND, 5 )
+		bSizer36.Add( self.listCtrlShopping, 1, wx.ALL|wx.EXPAND, 5 )
+
+
+		self.m_panel3.SetSizer( bSizer36 )
+		self.m_panel3.Layout()
+		bSizer36.Fit( self.m_panel3 )
+		self.m_notebook1.AddPage( self.m_panel3, u"Imports", False )
+		self.m_panel4 = wx.Panel( self.m_notebook1, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.TAB_TRAVERSAL )
+		bSizer361 = wx.BoxSizer( wx.VERTICAL )
+
+		bSizer351 = wx.BoxSizer( wx.HORIZONTAL )
+
+		self.m_staticText351 = wx.StaticText( self.m_panel4, wx.ID_ANY, u"Export Manifest", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.m_staticText351.Wrap( -1 )
+
+		bSizer351.Add( self.m_staticText351, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
+
+
+		bSizer351.Add( ( 0, 0), 1, wx.EXPAND, 5 )
+
+		self.buttonCopyExportJson = wx.Button( self.m_panel4, wx.ID_ANY, u"Copy JSON", wx.DefaultPosition, wx.DefaultSize, 0 )
+		bSizer351.Add( self.buttonCopyExportJson, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
+
+
+		bSizer361.Add( bSizer351, 0, wx.EXPAND, 5 )
+
+		self.listCtrlExports = wx.ListCtrl( self.m_panel4, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.LC_REPORT )
+		self.listCtrlExports.SetFont( wx.Font( wx.NORMAL_FONT.GetPointSize(), wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, False, wx.EmptyString ) )
+
+		bSizer361.Add( self.listCtrlExports, 1, wx.ALL|wx.EXPAND, 5 )
+
+
+		self.m_panel4.SetSizer( bSizer361 )
+		self.m_panel4.Layout()
+		bSizer361.Fit( self.m_panel4 )
+		self.m_notebook1.AddPage( self.m_panel4, u"Exports", False )
+
+		bSizer17.Add( self.m_notebook1, 2, wx.EXPAND |wx.ALL, 5 )
 
 
 		bSizer14.Add( bSizer17, 0, wx.EXPAND, 5 )
