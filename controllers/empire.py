@@ -219,6 +219,22 @@ class EmpireController(controllers.controller.Controller):
         wx.CallAfter(self.onRefreshComplete)
 
     def onRefreshComplete(self):
+        e2 = models.empire.Empire.loadFromFIO()
+
+        if e2:
+            e2_bases = {b.planet.PlanetNaturalId: b for b in e2.bases}
+            for b in self.empire.bases:
+                if b.planet.PlanetNaturalId in e2_bases:
+                    b2 = e2_bases[b.planet.PlanetNaturalId]
+
+                    b.SiteId = b2.SiteId
+
+                    for k, v in b.experts.items():
+                        b2.experts[k] = v
+                    b2.setIsCompanyHQ(b.isCompanyHQ)
+                    b2.setIsCorpHQ(b.isCorpHQ)
+            self.setCompareEmpire(e2)
+
         self.onEmpireChanged(id(self.empire))
         self.view.statusBar.PopStatusText()
         self.view.toolBar.EnableTool(self.view.toolRefreshFio.GetId(), True)
